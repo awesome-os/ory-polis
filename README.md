@@ -579,3 +579,13 @@ incorporate those changes, we document these changes in the
 
 We encourage all contributions and encourage you to read our
 [contribution guidelines](./CONTRIBUTING.md)
+
+## Quick Install & Run (Windows / Linux / macOS)
+
+```sh
+# Install globally via awesome-os/pnpm (all platforms)
+pnpm add -g github:awesome-os/ory-polis
+
+# Run directly (all platforms)
+ory-polis --help
+```
