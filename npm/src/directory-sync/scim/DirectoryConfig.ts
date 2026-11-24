@@ -194,6 +194,7 @@ export class DirectoryConfig {
    *           application/json:
    *             schema:
    *               $ref: "#/components/schemas/Directory"
+   *     x-ory-ratelimit-bucket: polis-public-medium
    */
   public async create(params: {
     name?: string;
@@ -317,6 +318,7 @@ export class DirectoryConfig {
    *           application/json:
    *             schema:
    *               $ref: "#/components/schemas/Directory"
+   *     x-ory-ratelimit-bucket: polis-public-high
    */
   public async get(id: string): Promise<Response<Directory>> {
     metrics.increment('getDsyncConnections');
@@ -387,6 +389,7 @@ export class DirectoryConfig {
    *           application/json:
    *             schema:
    *               $ref: "#/components/schemas/Directory"
+   *     x-ory-ratelimit-bucket: polis-public-medium
    */
   public async update(
     id: string,
@@ -401,6 +404,11 @@ export class DirectoryConfig {
       }
 
       const directory: Directory = await this.store().get(id);
+
+      if (!directory) {
+        throw new JacksonError('Directory configuration not found.', 404);
+      }
+
       const toUpdate = {
         ...directory,
       };
@@ -473,6 +481,7 @@ export class DirectoryConfig {
    *               type: array
    *               items:
    *                 $ref: "#/components/schemas/Directory"
+   *     x-ory-ratelimit-bucket: polis-public-high
    */
   public async getByTenantAndProduct(tenant: string, product: string): Promise<Response<Directory[]>> {
     metrics.increment('getDsyncConnections');
@@ -542,6 +551,7 @@ export class DirectoryConfig {
    *       200:
    *         description: Success
    *         content: {}
+   *     x-ory-ratelimit-bucket: polis-public-medium
    */
   public async delete(id: string): Promise<Response<null>> {
     metrics.increment('deleteDsyncConnections');
@@ -628,6 +638,7 @@ export class DirectoryConfig {
    *                  pageToken:
    *                    type: string
    *                    description: token for pagination
+   *     x-ory-ratelimit-bucket: polis-public-high
    */
   public async filterBy(
     params: FilterByParams = {}

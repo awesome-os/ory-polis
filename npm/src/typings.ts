@@ -108,10 +108,7 @@ type TenantQuery = { tenant: string; product: string; strategy?: ConnectionType 
 type TenantProduct = { tenant: string; product: string };
 
 export type GetConnectionsQuery =
-  | ClientIDQuery
-  | TenantQuery
-  | { entityId: string }
-  | { tenant: string[]; product: string; sort?: boolean };
+  ClientIDQuery | TenantQuery | { entityId: string } | { tenant: string[]; product: string; sort?: boolean };
 
 export type GetIDPEntityIDBody = TenantProduct;
 export type DelConnectionsQuery = (ClientIDQuery & { clientSecret: string }) | TenantQuery;
@@ -163,8 +160,8 @@ export interface IConnectionAPIController {
    * @deprecated Use `updateSAMLConnection` instead.
    */
   updateConfig(body: UpdateSAMLConnectionParams): Promise<void>;
-  updateSAMLConnection(body: UpdateSAMLConnectionParams): Promise<void>;
-  updateOIDCConnection(body: UpdateOIDCConnectionParams): Promise<void>;
+  updateSAMLConnection(body: UpdateSAMLConnectionParams): Promise<SAMLSSORecord>;
+  updateOIDCConnection(body: UpdateOIDCConnectionParams): Promise<OIDCSSORecord>;
   getConnections(body: GetConnectionsQuery): Promise<Array<SAMLSSORecord | OIDCSSORecord>>;
   getIDPEntityID(body: GetIDPEntityIDBody): string;
   /**
@@ -231,7 +228,7 @@ export interface IOidcDiscoveryController {
 
 export interface OAuthReqBody {
   state: string;
-  response_type: 'code';
+  response_type: 'code' | 'token';
   redirect_uri: string;
   code_challenge: string;
   code_challenge_method: 'plain' | 'S256' | '';
@@ -443,15 +440,25 @@ export interface JacksonOption {
     requestProfileScope?: boolean; // defaults to true
     forwardOIDCParams?: boolean; // defaults to false
     subjectPrefix?: boolean; // defaults to false
+    redirectExactMatch?: boolean; // defaults to false
   };
   certs?: { publicKey: string; privateKey: string };
-  boxyhqLicenseKey?: string;
+  polisLicenseKey?: string;
   noAnalytics?: boolean;
   webhook?: Webhook;
   dsync?: {
     webhookBatchSize?: number;
     webhookBatchCronInterval?: number;
     debugWebhooks?: boolean;
+    /**
+     * Maximum number of group members returned inline in a SCIM Group response
+     * when `includeMembers=true` is requested. Groups larger than this return
+     * an error instead. Defaults to 500.
+     */
+    maxInlineGroupMembers?: number;
+    // Retention for SCIM webhook event logs as a duration string (e.g. "720h",
+    // "30d"). Unset keeps the 7-day default; an empty string means indefinite.
+    webhookLogsTTL?: string;
     providers?: {
       google: {
         clientId: string;
@@ -466,7 +473,7 @@ export interface JacksonOption {
 
   /**  The number of days a setup link is valid for. Defaults to 3 days. */
   setupLinkExpiryDays?: number;
-  boxyhqHosted?: boolean;
+  polisHosted?: boolean;
 
   ssoTraces?: SSOTracesOption;
   logger?: {
@@ -475,6 +482,8 @@ export interface JacksonOption {
     error?: (msg: string, err?: any) => void;
   };
   flattenRawClaims?: boolean;
+  jsonErrorPage?: boolean;
+  authnRequestsSigned?: boolean;
 }
 
 export interface SLORequestParams {

@@ -13,7 +13,6 @@ const addSSOConnections = async (
     const _record = await ('oidcDiscoveryUrl' in connection
       ? connectionAPIController.createOIDCConnection(connection)
       : connectionAPIController.createSAMLConnection(connection));
-    // eslint-disable-next-line @typescript-eslint/no-unused-expressions
     !('oidcDiscoveryUrl' in connection) &&
       idpEnabledConnectionAPIController &&
       (await idpEnabledConnectionAPIController.createSAMLConnection(connection));
@@ -35,7 +34,7 @@ const jacksonOptions = <JacksonOption>{
     jwtSigningKeys: { private: 'PRIVATE_KEY', public: 'PUBLIC_KEY' },
     jwsAlg: 'RS256',
   },
-  boxyhqLicenseKey: 'dummy-license',
+  polisLicenseKey: 'dummy-license',
   noAnalytics: true,
   dsync: {
     providers: {

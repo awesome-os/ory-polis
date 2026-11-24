@@ -65,21 +65,13 @@ let code_verifier: string;
 let code_challenge: string;
 
 function _stubRandomBytes(codeOrToken: string) {
-  return (
-    sinon
-      .stub(crypto, 'randomBytes')
-      // eslint-disable-next-line @typescript-eslint/ban-ts-comment
-      // @ts-ignore
-      .returns(codeOrToken)
-      .onSecondCall()
-      // eslint-disable-next-line @typescript-eslint/ban-ts-comment
-      // @ts-ignore
-      .returns(genKey)
-      .onThirdCall()
-      // eslint-disable-next-line @typescript-eslint/ban-ts-comment
-      // @ts-ignore
-      .returns(iv)
-  );
+  return sinon
+    .stub(crypto, 'randomBytes')
+    .returns(codeOrToken as any)
+    .onSecondCall()
+    .returns(genKey as any)
+    .onThirdCall()
+    .returns(iv as any);
 }
 
 function stubRandomBytesCode() {
@@ -91,33 +83,19 @@ function stubRandomBytesToken() {
 }
 
 function stubRandomBytesAll() {
-  return (
-    sinon
-      .stub(crypto, 'randomBytes')
-      // eslint-disable-next-line @typescript-eslint/ban-ts-comment
-      // @ts-ignore
-      .returns(code)
-      .onSecondCall()
-      // eslint-disable-next-line @typescript-eslint/ban-ts-comment
-      // @ts-ignore
-      .returns(genKey)
-      .onThirdCall()
-      // eslint-disable-next-line @typescript-eslint/ban-ts-comment
-      // @ts-ignore
-      .returns(iv)
-      .onCall(3)
-      // eslint-disable-next-line @typescript-eslint/ban-ts-comment
-      // @ts-ignore
-      .returns(token)
-      .onCall(4)
-      // eslint-disable-next-line @typescript-eslint/ban-ts-comment
-      // @ts-ignore
-      .returns(genKey)
-      .onCall(5)
-      // eslint-disable-next-line @typescript-eslint/ban-ts-comment
-      // @ts-ignore
-      .returns(iv)
-  );
+  return sinon
+    .stub(crypto, 'randomBytes')
+    .returns(code as any)
+    .onSecondCall()
+    .returns(genKey as any)
+    .onThirdCall()
+    .returns(iv as any)
+    .onCall(3)
+    .returns(token as any)
+    .onCall(4)
+    .returns(genKey as any)
+    .onCall(5)
+    .returns(iv as any);
 }
 
 tap.before(async () => {
@@ -251,6 +229,13 @@ tap.test('authorize()', async (t) => {
       t.ok('redirect_url' in response, 'got the Idp authorize URL');
       t.ok(params.has('RelayState'), 'RelayState present in the query string');
       t.ok(params.has('SAMLRequest'), 'SAMLRequest present in the query string');
+      t.ok(params.has('SigAlg'), 'SigAlg present in the query string for HTTP-Redirect binding');
+      t.ok(params.has('Signature'), 'Signature present in the query string for HTTP-Redirect binding');
+      t.equal(
+        params.get('SigAlg'),
+        'http://www.w3.org/2001/04/xmldsig-more#rsa-sha256',
+        'SigAlg should be RSA-SHA256'
+      );
     });
 
     t.test('accepts single value in prompt', async (t) => {
@@ -301,6 +286,32 @@ tap.test('authorize()', async (t) => {
       t.ok('redirect_url' in response, 'got the Idp authorize URL');
       t.ok(params.has('RelayState'), 'RelayState present in the query string');
       t.ok(params.has('SAMLRequest'), 'SAMLRequest present in the query string');
+    });
+
+    t.test('HTTP-Redirect query string signature is verifiable', async (t) => {
+      const body = authz_request_normal;
+
+      const response = (await oauthController.authorize(<OAuthReq>body)) as {
+        redirect_url: string;
+      };
+      const params = new URLSearchParams(new URL(response.redirect_url!).search);
+
+      const samlRequest = params.get('SAMLRequest')!;
+      const relayState = params.get('RelayState')!;
+      const querySigAlg = params.get('SigAlg')!;
+      const signature = params.get('Signature')!;
+
+      // Reconstruct the signed query string in the canonical order
+      const queryToVerify = `SAMLRequest=${encodeURIComponent(samlRequest)}&RelayState=${encodeURIComponent(relayState)}&SigAlg=${encodeURIComponent(querySigAlg)}`;
+
+      const { getDefaultCertificate } = await import('../../src/saml/x509');
+      const { publicKey } = await getDefaultCertificate();
+
+      const verifier = crypto.createVerify('RSA-SHA256');
+      verifier.update(queryToVerify);
+      const isValid = verifier.verify(publicKey, signature, 'base64');
+
+      t.ok(isValid, 'Query string signature should be verifiable with the public key');
     });
   });
 });

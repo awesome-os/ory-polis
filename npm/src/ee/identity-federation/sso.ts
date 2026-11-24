@@ -54,7 +54,7 @@ export class SSO {
     samlBinding: 'HTTP-POST' | 'HTTP-Redirect';
     idp_hint?: string;
   }) => {
-    await throwIfInvalidLicense(this.opts.boxyhqLicenseKey);
+    await throwIfInvalidLicense(this.opts.polisLicenseKey);
 
     const protocol = 'saml-federation';
     const login_type = 'sp-initiated';
@@ -134,7 +134,13 @@ export class SSO {
         relayState,
         tenant: app.tenant,
         product: app.product,
+        // Persist the app's tenant allow-list so the upstream-response callback
+        // can re-assert that the connection it selects is in scope, including
+        // for multi-tenant federation apps where the connection may live in any
+        // of app.tenants.
+        tenants: app.tenants,
         fedAppSamlAudienceOverride: app.samlAudienceOverride,
+        ttlInMinutes: app.ttlInMinutes,
       };
 
       return isSAMLConnection(connection)
@@ -143,6 +149,7 @@ export class SSO {
             connection,
             requestParams,
             mappings: app.mappings,
+            includeOidcTokensInAssertion: app.includeOidcTokensInAssertion,
             ssoTraces: { instance: this.ssoTraces, context },
           });
     } catch (err: unknown) {

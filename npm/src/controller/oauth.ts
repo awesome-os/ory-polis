@@ -2,7 +2,7 @@ import crypto from 'crypto';
 import { promisify } from 'util';
 import { deflateRaw } from 'zlib';
 import saml from '@boxyhq/saml20';
-import { validateSSOURL } from './utils';
+import { validateSSOURL, sigAlg, signQueryString } from './utils';
 import { SAMLProfile } from '@boxyhq/saml20/dist/typings';
 import type {
   IOAuthController,
@@ -246,9 +246,21 @@ export class OAuthController implements IOAuthController {
       connectionIsOIDC = 'oidcProvider' in connection && connection.oidcProvider !== undefined;
       protocol = isOIDCFederated ? 'oidc-federation' : connectionIsSAML ? 'saml' : 'oidc';
 
-      if (!allowed.redirect(redirect_uri, connection.redirectUrl as string[])) {
+      if (
+        !allowed.redirect(
+          redirect_uri,
+          connection.redirectUrl as string[],
+          this.opts.openid?.redirectExactMatch
+        )
+      ) {
         if (fedApp) {
-          if (!allowed.redirect(redirect_uri, fedApp.redirectUrl as string[])) {
+          if (
+            !allowed.redirect(
+              redirect_uri,
+              fedApp.redirectUrl as string[],
+              this.opts.openid?.redirectExactMatch
+            )
+          ) {
             throw new JacksonError('Redirect URL is not allowed.', 403);
           }
         } else {
@@ -347,7 +359,7 @@ export class OAuthController implements IOAuthController {
     const sessionId = crypto.randomBytes(16).toString('hex');
     const relayState = relayStatePrefix + sessionId;
     // SAML connection: SAML request will be constructed here
-    let samlReq, internalError;
+    let samlReq, samlReqSigningKey: string | undefined, internalError;
     if (connectionIsSAML) {
       try {
         const { sso, provider } = (connection as SAMLSSORecord).idpMetadata;
@@ -394,19 +406,24 @@ export class OAuthController implements IOAuthController {
 
         const cert = await getDefaultCertificate();
 
-        samlReq = saml.request({
+        const samlRequestOpts = {
           ssoUrl,
           entityID: connection.samlAudienceOverride
             ? connection.samlAudienceOverride
             : this.opts.samlAudience!,
           callbackUrl: connection.acsUrlOverride ? connection.acsUrlOverride : (this.opts.acsUrl as string),
-          signingKey: cert.privateKey,
-          publicKey: cert.publicKey,
           forceAuthn: forceAuthn === 'true' ? true : !!(connection as SAMLSSORecord).forceAuthn,
           identifierFormat: (connection as SAMLSSORecord).identifierFormat
             ? (connection as SAMLSSORecord).identifierFormat
             : 'urn:oasis:names:tc:SAML:1.1:nameid-format:emailAddress',
-        });
+        };
+
+        // For HTTP-POST, embed signature in the XML body
+        // For HTTP-Redirect, leave XML unsigned (query string is signed instead)
+        samlReq = post
+          ? saml.request({ ...samlRequestOpts, signingKey: cert.privateKey, publicKey: cert.publicKey })
+          : saml.request({ ...samlRequestOpts, signingKey: '', publicKey: '' });
+        samlReqSigningKey = cert.privateKey;
       } catch (err: unknown) {
         const error_description = getErrorMessage(err);
         this.opts.logger.error(`Authorize error: ${error_description} `);
@@ -538,6 +555,11 @@ export class OAuthController implements IOAuthController {
       if (requestedProduct) {
         requested.product = requestedProduct;
       }
+      // Persist the federation app's tenant allow-list so the upstream-response
+      // callback can re-assert connection scope, including multi-tenant apps.
+      if (fedApp?.tenants?.length) {
+        requested.tenants = fedApp.tenants;
+      }
       if (idp_hint) {
         requested.idp_hint = idp_hint;
       } else {
@@ -568,6 +590,7 @@ export class OAuthController implements IOAuthController {
               id: fedApp.id,
               clientID: fedApp.clientID,
               clientSecret: fedApp.clientSecret,
+              ttlInMinutes: fedApp.ttlInMinutes,
             }
           : undefined,
       };
@@ -583,13 +606,19 @@ export class OAuthController implements IOAuthController {
         let authorizeForm;
 
         if (!post) {
-          // HTTP Redirect binding
+          // HTTP-Redirect: sign the query string, not the XML body
+          const encodedRequest = Buffer.from(await deflateRawAsync(samlReq.request)).toString('base64');
+          const queryToSign = `SAMLRequest=${encodeURIComponent(encodedRequest)}&RelayState=${encodeURIComponent(relayState)}&SigAlg=${encodeURIComponent(sigAlg)}`;
+          const signature = signQueryString(queryToSign, samlReqSigningKey!);
+
           redirectUrl = redirect.success(ssoUrl, {
+            SAMLRequest: encodedRequest,
             RelayState: relayState,
-            SAMLRequest: Buffer.from(await deflateRawAsync(samlReq.request)).toString('base64'),
+            SigAlg: sigAlg,
+            Signature: signature,
           });
         } else {
-          // HTTP POST binding
+          // HTTP-POST: signature is already embedded in the XML
           authorizeForm = saml.createPostForm(ssoUrl, [
             { name: 'RelayState', value: relayState },
             { name: 'SAMLRequest', value: Buffer.from(samlReq.request).toString('base64') },
@@ -728,6 +757,41 @@ export class OAuthController implements IOAuthController {
             (c.tenant === session.requested.tenant && c.product === session.requested.product)
           );
         })[0];
+
+        // Defense in depth: re-assert that the selected connection belongs to
+        // the tenant/product scope the session was created under. The scoping
+        // in resolveConnection already prevents an out-of-scope connection from
+        // being bound to a session, but selecting by clientID/idp_hint here is
+        // not tenant-bound on its own, so we verify the result against the
+        // session's allow-list (CWE-639). Multi-tenant federation apps persist
+        // their tenant list; everything else is scoped to a single tenant.
+        //
+        // This fails closed: if the session does not carry a verifiable scope
+        // (tenant/tenants and product), we deny rather than fall back to the
+        // permissive filter above. Every SP-initiated and federated SAML
+        // session created by authorize() and createSAMLRequest() sets both, so
+        // a missing scope means a malformed or legacy session and must not pass.
+        let allowedTenants: string[] = [];
+        if (Array.isArray(session.requested.tenants)) {
+          // Multi-tenant federation app: any of the app's tenants is in scope.
+          allowedTenants = session.requested.tenants;
+        } else if (session.requested.tenant) {
+          // Everything else is scoped to the session's single tenant.
+          allowedTenants = [session.requested.tenant];
+        }
+
+        const tenantsKnown = allowedTenants.length > 0;
+        const productKnown = !!session.requested.product;
+
+        if (
+          connection &&
+          (!tenantsKnown ||
+            !productKnown ||
+            !allowedTenants.includes(connection.tenant) ||
+            connection.product !== session.requested.product)
+        ) {
+          throw new JacksonError(GENERIC_ERR_STRING, 403, 'SAML connection not found.');
+        }
       }
 
       if (!connection) {
@@ -737,10 +801,20 @@ export class OAuthController implements IOAuthController {
       if (
         session &&
         session.redirect_uri &&
-        !allowed.redirect(session.redirect_uri, connection.redirectUrl as string[])
+        !allowed.redirect(
+          session.redirect_uri,
+          connection.redirectUrl as string[],
+          this.opts.openid?.redirectExactMatch
+        )
       ) {
         if (isOIDCFederated) {
-          if (!allowed.redirect(session.redirect_uri, session.oidcFederated?.redirectUrl as string[])) {
+          if (
+            !allowed.redirect(
+              session.redirect_uri,
+              session.oidcFederated?.redirectUrl as string[],
+              this.opts.openid?.redirectExactMatch
+            )
+          ) {
             throw new JacksonError('Redirect URL is not allowed.', 403);
           }
         } else {
@@ -909,9 +983,22 @@ export class OAuthController implements IOAuthController {
           throw new JacksonError('Redirect URL from the authorization request could not be retrieved', 403);
         }
 
-        if (redirect_uri && !allowed.redirect(redirect_uri, oidcConnection.redirectUrl as string[])) {
+        if (
+          redirect_uri &&
+          !allowed.redirect(
+            redirect_uri,
+            oidcConnection.redirectUrl as string[],
+            this.opts.openid?.redirectExactMatch
+          )
+        ) {
           if (isOIDCFederated) {
-            if (!allowed.redirect(redirect_uri, session.oidcFederated?.redirectUrl as string[])) {
+            if (
+              !allowed.redirect(
+                redirect_uri,
+                session.oidcFederated?.redirectUrl as string[],
+                this.opts.openid?.redirectExactMatch
+              )
+            ) {
               throw new JacksonError('Redirect URL is not allowed.', 403);
             }
           } else {
@@ -943,6 +1030,51 @@ export class OAuthController implements IOAuthController {
       });
       // Rethrow err and redirect to Jackson error page
       throw err;
+    }
+
+    // If the OIDC provider returned an error, forward it to the redirect_uri
+    // without attempting discovery or token exchange
+    if (callbackParams.error) {
+      const { error, error_description } = callbackParams;
+      const error_message = error_description || 'Authorization failed at the OIDC provider';
+      this.opts.logger.error(`OIDCResponse error from provider: ${error_message}`);
+      metrics.increment(protocol === 'oidc' ? 'oauthResponseError' : 'idfedResponseError', {
+        protocol,
+        login_type,
+      });
+      const traceId = await this.ssoTraces.saveTrace({
+        error: error_message,
+        context: {
+          tenant: oidcConnection!.tenant,
+          product: oidcConnection!.product,
+          clientID: oidcConnection!.clientID,
+          providerName: oidcConnection!.oidcProvider?.provider,
+          redirectUri: redirect_uri,
+          relayState: RelayState,
+          isSAMLFederated,
+          isOIDCFederated,
+          acsUrl: session.requested.acsUrl,
+          entityId: session.requested.entityId,
+          requestedOIDCFlow: !!session.requested.oidc,
+          oidcIdPRequest: session?.requested?.oidcIdPRequest,
+          error,
+          error_description,
+        },
+      });
+
+      if (isSAMLFederated) {
+        throw new JacksonError(error_message, 403);
+      }
+
+      return {
+        redirect_url: OAuthErrorResponse({
+          error: (error as OAuthErrorHandlerParams['error']) || 'server_error',
+          error_description: traceId ? `${traceId}: ${error_message}` : error_message,
+          redirect_uri: redirect_uri!,
+          state: session.state,
+        }),
+        error: `${error} - ${error_message}`,
+      };
     }
 
     // Reconstruct the oidcClient, code exchange for token and user profile happens here
@@ -983,7 +1115,7 @@ export class OAuthController implements IOAuthController {
         expectedState: callbackParams.state,
         idTokenExpected: true,
       });
-      profile = await extractOIDCUserProfile(tokens, oidcConfig);
+      profile = await extractOIDCUserProfile(tokens, oidcConfig, session.includeOidcTokensInAssertion);
 
       if (isSAMLFederated) {
         const { responseForm } = await this.ssoHandler.createSAMLResponse({ profile, session });
@@ -1151,6 +1283,7 @@ export class OAuthController implements IOAuthController {
    *                 access_token: 8958e13053832b5af58fdf2ee83f35f5d013dc74
    *                 token_type: bearer
    *                 expires_in: "300"
+   *     x-ory-ratelimit-bucket: polis-public-medium
    */
   public async token(body: OAuthTokenReq, authHeader?: string | null): Promise<OAuthTokenRes> {
     let basic_client_id: string | undefined;
@@ -1341,7 +1474,7 @@ export class OAuthController implements IOAuthController {
 
       // delete the code
       try {
-        await this.codeStore.delete(code);
+        await this.codeStore.delete(codes[1]);
         // eslint-disable-next-line @typescript-eslint/no-unused-vars
       } catch (_err) {
         // ignore error
@@ -1411,6 +1544,7 @@ export class OAuthController implements IOAuthController {
    *                 lastName: Jackson
    *                 raw: {}
    *                 requested: {}
+   *     x-ory-ratelimit-bucket: polis-public-high
    */
   public async userInfo(token: string): Promise<Profile> {
     const tokens = token.split('.');

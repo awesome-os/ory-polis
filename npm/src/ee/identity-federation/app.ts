@@ -28,6 +28,8 @@ type NewAppParams = Pick<
   | 'type'
   | 'redirectUrl'
   | 'samlAudienceOverride'
+  | 'includeOidcTokensInAssertion'
+  | 'ttlInMinutes'
 > & {
   logoUrl?: string;
   faviconUrl?: string;
@@ -97,6 +99,12 @@ export class App {
    *         samlAudienceOverride:
    *           type: string
    *           description: Override the SAML Audience on a per app basis
+   *         includeOidcTokensInAssertion:
+   *           type: boolean
+   *           description: Include OIDC tokens in the SAML assertion
+   *         ttlInMinutes:
+   *           type: number
+   *           description: Time-to-live in minutes for the SAML assertion, does not apply to OIDC flows
    *     IdentityFederationApp:
    *       allOf:
    *         - $ref: "#/components/schemas/IdentityFederationAppCreate"
@@ -155,6 +163,7 @@ export class App {
    *           application/json:
    *             schema:
    *               $ref: "#/components/schemas/IdentityFederationResponse"
+   *     x-ory-ratelimit-bucket: polis-public-medium
    */
   public async create({
     name,
@@ -170,8 +179,10 @@ export class App {
     tenants,
     mappings,
     samlAudienceOverride,
+    includeOidcTokensInAssertion,
+    ttlInMinutes,
   }: NewAppParams) {
-    await throwIfInvalidLicense(this.opts.boxyhqLicenseKey);
+    await throwIfInvalidLicense(this.opts.polisLicenseKey);
 
     if (type === 'oidc') {
       if (!tenant || !product || !redirectUrl || !name) {
@@ -244,6 +255,8 @@ export class App {
       tenants: _tenants,
       mappings: mappings || [],
       samlAudienceOverride: samlAudienceOverride || null,
+      includeOidcTokensInAssertion,
+      ttlInMinutes: ttlInMinutes ?? null,
     };
 
     if (type === 'oidc') {
@@ -301,9 +314,10 @@ export class App {
    *           application/json:
    *             schema:
    *               $ref: "#/components/schemas/IdentityFederationResponse"
+   *     x-ory-ratelimit-bucket: polis-public-high
    */
   public async get(params: AppRequestParams) {
-    await throwIfInvalidLicense(this.opts.boxyhqLicenseKey);
+    await throwIfInvalidLicense(this.opts.polisLicenseKey);
 
     if ('id' in params) {
       const app = await this.store.get(params.id);
@@ -362,9 +376,10 @@ export class App {
    *                   pageToken:
    *                     type: string
    *                     description: token for pagination
+   *     x-ory-ratelimit-bucket: polis-public-high
    */
   public async getByProduct({ product, pageOffset, pageLimit, pageToken }: GetByProductParams) {
-    await throwIfInvalidLicense(this.opts.boxyhqLicenseKey);
+    await throwIfInvalidLicense(this.opts.polisLicenseKey);
 
     if (!product) {
       throw new JacksonError('Please provide a `product`.', 400);
@@ -385,7 +400,7 @@ export class App {
 
   // Get the app by SP EntityId
   public async getByEntityId(entityId: string) {
-    await throwIfInvalidLicense(this.opts.boxyhqLicenseKey);
+    await throwIfInvalidLicense(this.opts.polisLicenseKey);
 
     if (!entityId) {
       throw new JacksonError(
@@ -431,9 +446,10 @@ export class App {
    *           application/json:
    *             schema:
    *               $ref: "#/components/schemas/IdentityFederationResponse"
+   *     x-ory-ratelimit-bucket: polis-public-medium
    */
   public async update(params: Partial<IdentityFederationApp>) {
-    await throwIfInvalidLicense(this.opts.boxyhqLicenseKey);
+    await throwIfInvalidLicense(this.opts.polisLicenseKey);
 
     const { id, tenant, product, type } = params;
 
@@ -502,6 +518,14 @@ export class App {
       toUpdate['samlAudienceOverride'] = params.samlAudienceOverride;
     }
 
+    if ('includeOidcTokensInAssertion' in params) {
+      toUpdate['includeOidcTokensInAssertion'] = params.includeOidcTokensInAssertion;
+    }
+
+    if ('ttlInMinutes' in params) {
+      toUpdate['ttlInMinutes'] = params.ttlInMinutes ?? null;
+    }
+
     if (Object.keys(toUpdate).length === 0) {
       throw new JacksonError(
         'Please provide at least one of the following parameters: acsUrl, name, logoUrl, faviconUrl, primaryColor',
@@ -529,7 +553,7 @@ export class App {
     pageLimit?: number;
     pageToken?: string;
   }) {
-    await throwIfInvalidLicense(this.opts.boxyhqLicenseKey);
+    await throwIfInvalidLicense(this.opts.polisLicenseKey);
 
     const apps = (await this.store.getAll(
       pageOffset,
@@ -574,10 +598,11 @@ export class App {
    *               properties:
    *                 error:
    *                   $ref: "#/components/schemas/IdentityFederationError"
+   *     x-ory-ratelimit-bucket: polis-public-medium
    */
 
   public async delete(params: AppRequestParams): Promise<void> {
-    await throwIfInvalidLicense(this.opts.boxyhqLicenseKey);
+    await throwIfInvalidLicense(this.opts.polisLicenseKey);
 
     if ('id' in params) {
       return await this.store.delete(params.id);
@@ -593,7 +618,7 @@ export class App {
 
   // Get the metadata for the app
   public async getMetadata(samlAudienceOverride?: string) {
-    await throwIfInvalidLicense(this.opts.boxyhqLicenseKey);
+    await throwIfInvalidLicense(this.opts.polisLicenseKey);
 
     const { publicKey } = await getDefaultCertificate();
 

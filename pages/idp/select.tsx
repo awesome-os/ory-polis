@@ -1,5 +1,5 @@
 /* eslint-disable @next/next/no-img-element */
-import { useEffect, useRef, useState } from 'react';
+import { useEffect, useRef, useState, ChangeEvent } from 'react';
 import getRawBody from 'raw-body';
 import { useRouter } from 'next/router';
 import { useTranslation } from 'next-i18next';
@@ -11,7 +11,7 @@ import Head from 'next/head';
 import { hexToOklch } from '@lib/color';
 import { PoweredBy } from '@components/ProtectedBy';
 import { getPortalBranding, getProductBranding } from '@ee/branding/utils';
-import { boxyhqHosted } from '@lib/env';
+import { polisHosted } from '@lib/env';
 import { createGlobalStyle } from 'styled-components';
 
 const GlobalStyle = createGlobalStyle<{ primaryColor: string | null }>`
@@ -144,7 +144,7 @@ const AppSelector = ({
   }, [connection]);
 
   // IdP initiated SSO: Submit the SAMLResponse and idp_hint to the SAML ACS endpoint
-  const appSelected = (e: React.ChangeEvent<HTMLInputElement>) => {
+  const appSelected = (e: ChangeEvent<HTMLInputElement>) => {
     setConnection(e.target.value);
     formRef.current?.submit();
   };
@@ -246,7 +246,7 @@ export const getServerSideProps = async ({ query, locale, req }) => {
   }
 
   // Get the branding to use for the IdP selector screen
-  let branding = boxyhqHosted && product ? await getProductBranding(product) : await getPortalBranding();
+  let branding = polisHosted && product ? await getProductBranding(product) : await getPortalBranding();
 
   // For SAML federated requests, use the branding from the SAML federated app
   if (identityFederationApp && (await checkLicense())) {
@@ -292,7 +292,7 @@ export const getServerSideProps = async ({ query, locale, req }) => {
       };
     }
 
-    if (boxyhqHosted) {
+    if (polisHosted) {
       // Fetch products to display the product name instead of the product ID
       const products = (await Promise.allSettled(
         connectionsTransformed.map((connection) => productController.get(connection.product))

@@ -12,7 +12,7 @@ enum DirectorySyncProviders {
   'okta-scim-v2' = 'Okta SCIM v2.0',
   'jumpcloud-scim-v2' = 'JumpCloud v2.0',
   'generic-scim-v2' = 'Generic SCIM v2.0',
-  'google' = 'Google',
+  google = 'Google',
 }
 
 type DirectorySyncEventType =
@@ -106,6 +106,8 @@ export type IdentityFederationApp = {
   primaryColor?: string;
   tenants?: string[]; // To support multiple tenants for a single app
   mappings: AttributeMapping[] | null;
+  samlAudienceOverride?: string | null;
+  ttlInMinutes?: number | null;
 };
 
 export interface Trace {
