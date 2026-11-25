@@ -1,0 +1,52 @@
+{
+  "schema": "holo-compiler-lockfile-v1",
+  "abiMagic": "0x33564742",
+  "casLayout": "v11",
+  "repo": "awesome-os/ory-polis",
+  "targets": [
+    "win64",
+    "linux-x64",
+    "linux-arm64",
+    "macos-arm64",
+    "wasm32-wasi"
+  ],
+  "generatedAt": "2026-11-24T23:53:02.473Z",
+  "dependencies": [
+    {
+      "id": "awesome-os/ory-polis/ory-polis-v26.2.0-awesome-os.1.tar.zst",
+      "kind": "object",
+      "version": "v26.2.0-awesome-os.1",
+      "target": "any",
+      "sha512": "fba0749f10a63ec4d98f044e0f101b997a91e049d67a0ae867b9f53fb3e82c1a6af95aa1252528c4a90de4a0093383cab1f73d6a6aad6abc5f0f68b4f097168b",
+      "size": 18984440,
+      "executable": false,
+      "blob": "v11/files/fb/fba0749f10a63ec4d98f044e0f101b997a91e049d67a0ae867b9f53fb3e82c1a6af95aa1252528c4a90de4a0093383cab1f73d6a6aad6abc5f0f68b4f097168b",
+      "url": "https://github.com/awesome-os/ory-polis/releases/download/v26.2.0-awesome-os.1/ory-polis-v26.2.0-awesome-os.1.tar.zst",
+      "dependencies": []
+    },
+    {
+      "id": "awesome-os/ory-polis/SHA256SUMS.txt",
+      "kind": "object",
+      "version": "v26.2.0-awesome-os.1",
+      "target": "any",
+      "sha512": "a726508bce71dbd2fbd922bb6eeb043cc70a3546d6806985dc7a537c08bdc843d305fa73eecb35b4950e08c6d4ae2f620b43d2e7320bf03becc6ca22a0f2b90c",
+      "size": 105,
+      "executable": false,
+      "blob": "v11/files/a7/a726508bce71dbd2fbd922bb6eeb043cc70a3546d6806985dc7a537c08bdc843d305fa73eecb35b4950e08c6d4ae2f620b43d2e7320bf03becc6ca22a0f2b90c",
+      "url": "https://github.com/awesome-os/ory-polis/releases/download/v26.2.0-awesome-os.1/SHA256SUMS.txt",
+      "dependencies": []
+    },
+    {
+      "id": "awesome-os/ory-polis/SHA512SUMS.txt",
+      "kind": "object",
+      "version": "v26.2.0-awesome-os.1",
+      "target": "any",
+      "sha512": "2841480261cdad8c6b226a2da545a61439e76e76d6d780e7a034444741ad89bd34d7b753f54b5b9ccd2c53c34deabcd51bd148b621738bf86ed414a804d5a32a",
+      "size": 169,
+      "executable": false,
+      "blob": "v11/files/28/2841480261cdad8c6b226a2da545a61439e76e76d6d780e7a034444741ad89bd34d7b753f54b5b9ccd2c53c34deabcd51bd148b621738bf86ed414a804d5a32a",
+      "url": "https://github.com/awesome-os/ory-polis/releases/download/v26.2.0-awesome-os.1/SHA512SUMS.txt",
+      "dependencies": []
+    }
+  ]
+}
