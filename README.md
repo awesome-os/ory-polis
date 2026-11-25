@@ -583,9 +583,9 @@ We encourage all contributions and encourage you to read our
 ## Quick Install & Run (Windows / Linux / macOS)
 
 ```sh
-# Install globally via awesome-os/pnpm (all platforms)
-pnpm add -g github:awesome-os/ory-polis
+# Install / hydrate from v11 CAS via holo-pm
+holo-pm install repository://github.com/awesome-os/ory-polis@main
 
-# Run directly (all platforms)
-ory-polis --help
+# Or project & run directly via holo-project (0-byte hardlink)
+holo-project "project://node/ory-polis?from=repository://github.com/awesome-os/ory-polis@main"
 ```
