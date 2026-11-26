@@ -75,7 +75,7 @@ test.describe('Admin Portal SSO - SAML', () => {
         await page
           .getByPlaceholder('https://sso.eu.boxyhq.com/api/oauth/saml')
           .fill(`${baseURL}/api/oauth/saml`);
-        await page.getByRole('textbox', { name: 'Please provide a mock email address' }).fill('bob');
+        await page.getByPlaceholder('jackson').fill('bob');
         await page.getByRole('button', { name: MOCKSAML_SIGNIN_BUTTON_NAME }).click();
         // Wait for browser to redirect to admin portal
         await page.waitForURL((url) => url.origin === baseURL);
