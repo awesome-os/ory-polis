@@ -3,13 +3,7 @@
   "abiMagic": "0x33564742",
   "casLayout": "v11",
   "repo": "awesome-os/ory-polis",
-  "targets": [
-    "win64",
-    "linux-x64",
-    "linux-arm64",
-    "macos-arm64",
-    "wasm32-wasi"
-  ],
+  "targets": ["win64", "linux-x64", "linux-arm64", "macos-arm64", "wasm32-wasi"],
   "generatedAt": "2026-11-24T23:53:02.473Z",
   "dependencies": [
     {
